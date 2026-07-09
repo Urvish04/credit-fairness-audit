@@ -1,10 +1,10 @@
 # Robust Fairness Audit of Credit Approval Models
 
-**TL;DR:** Audited Logistic Regression and Random Forest for demographic bias on the German Credit dataset. An initial finding — Random Forest showing a larger disparate impact than Logistic Regression on the "young" subgroup (DIR 0.93 → 0.89) — did not survive statistical stress-testing. Multi-seed resampling and formal bootstrapped confidence intervals both show the effect is within noise at this sample size (N=47). The core result isn't about which model is fairer; it's that **single-split fairness metrics on small subgroups are statistically unstable and require a stability check before being reported as a finding.**
+**TL;DR:** Audited Logistic Regression and Random Forest for demographic bias on the German Credit dataset. An initial single-split finding — Random Forest showing a larger disparate impact than Logistic Regression on the "young" subgroup (DIR 0.93 → 0.89) — did not survive statistical stress-testing. Multi-seed resampling and bootstrapped confidence intervals both show the effect is within noise at this sample size (N=47). The result is not a novel discovery; it is a concrete demonstration of a known but frequently ignored risk: **single-split fairness metrics on small subgroups are statistically unstable and require a stability check before being reported as a finding.**
 
 ## Motivation
 
-Algorithmic lending bias is an active regulatory concern — the Reserve Bank of India has flagged disparate treatment risk in automated credit decisioning as institutions increasingly rely on ML-based approval systems. Most introductory fairness projects report a single DIR or demographic-parity number and stop. This project asks a different question: **is that number even reproducible**, or does it evaporate under resampling? That question — not the audit itself — is the point of this repository.
+Model risk management guidance — most notably the Federal Reserve/OCC's *Supervisory Guidance on Model Risk Management* (SR 11-7) — requires that model outputs, including fairness and bias metrics, be validated for stability before being used in decisioning. Most introductory fairness projects report a single DIR or demographic-parity number and stop there. This project demonstrates why that single number is not sufficient evidence on its own: **does the metric survive resampling**, or does it evaporate under a stability check? That question — not the audit's headline numbers — is the point of this repository.
 
 ## Dataset
 
@@ -53,7 +53,7 @@ fairlearn Verification                (cross-check manual DIR calculations)
 2. **Fairness audit** — Approval rate, false negative rate, and Disparate Impact Ratio (DIR) computed per subgroup on the test set, against the EEOC "four-fifths rule" (DIR < 0.80 = adverse impact).
 3. **Model comparison** — Random Forest trained on the identical split to test whether a non-linear model changes fairness characteristics.
 4. **Multi-seed robustness check** — Both models re-evaluated across 5 independent splits (`random_state` = 42, 100, 2026, 777, 99). This captures variance from **both** the train/test split *and* re-fitting the model — i.e., "would this conclusion hold if I trained again on different data?"
-5. **Bootstrapped confidence intervals** — 1,000 resamples with replacement drawn from the fitted models' test-set predictions, used to compute exact 95% CIs on DIR. This isolates **pure test-set sampling variance** — i.e., "given this exact trained model, how much does the DIR estimate wobble just from which 47 people happened to land in the test set?" It's a narrower, complementary question to the multi-seed check, not a repeat of it.
+5. **Bootstrapped confidence intervals** — 1,000 resamples with replacement drawn from the fitted models' test-set predictions, used to compute exact 95% CIs and empirical violation rates for DIR. This isolates **pure test-set sampling variance** — i.e., "given this exact trained model, how much does the DIR estimate wobble just from which 47 people happened to land in the test set?" It's a narrower, complementary question to the multi-seed check, not a repeat of it.
 6. **Verification** — Manual calculations cross-checked against `fairlearn.metrics.demographic_parity_difference` — exact agreement confirmed.
 
 ## Results
@@ -67,7 +67,7 @@ fairlearn Verification                (cross-check manual DIR calculations)
 | DIR — Logistic Regression | 1.00 (ref) | 0.95 | 1.00 (ref) | 0.93 |
 | DIR — Random Forest | 1.00 (ref) | 0.96 | 1.00 (ref) | 0.89 |
 
-**Initial (single-split) finding:** RF appeared to increase disparate impact on the young subgroup relative to LR (DIR 0.93 → 0.89) — suggestive of the model amplifying an age-related proxy signal.
+**Initial (single-split) observation:** RF appeared to increase disparate impact on the young subgroup relative to LR (DIR 0.93 → 0.89) — suggestive of the model amplifying an age-related proxy signal. This observation is addressed, and shown not to hold, below.
 
 ![DIR Variance Chart](https://github.com/Urvish04/credit-fairness-audit/blob/main/dir_variance_chart.png?raw=true)
 
@@ -80,14 +80,16 @@ fairlearn Verification                (cross-check manual DIR calculations)
 
 A 0.04-point difference between two models means very little when each model's own DIR estimate moves by ~0.05 just from re-splitting the data.
 
-**2. Bootstrap variance (pure sampling variance).** Holding the trained models fixed and resampling only the test-set predictions (N=1,000 iterations) gives the 95% confidence interval on DIR for the young subgroup:
+**2. Bootstrap variance and empirical violation rate (pure sampling variance).** Holding the trained models fixed and resampling only the test-set predictions (N=1,000 iterations) gives the following for the young subgroup:
 
-| Model | 95% CI | Mean |
-|---|---|---|
-| Logistic Regression | 0.762 – 1.110 | 0.937 |
-| Random Forest | 0.744 – 1.056 | 0.899 |
+| Model | 95% CI | Mean | % of iterations with DIR < 0.80 |
+|---|---|---|---|
+| Logistic Regression | 0.762 – 1.110 | 0.937 | 12.1% |
+| Random Forest | 0.744 – 1.056 | 0.899 | 9.5% |
 
-These intervals overlap almost completely and each individually straddles the EEOC 0.80 threshold — meaning both models could look "adverse" or "compliant" depending on which 47 people happened to be in the test set, independent of any model-training variance at all.
+These intervals overlap substantially, and both models cross the EEOC 0.80 threshold in a non-trivial share of resamples — meaning either model could be flagged as "adverse impact" or "compliant" depending on which 47 people happened to be in the test set, independent of any model-training variance at all.
+
+Both bootstrap distributions are **right-skewed rather than normal** — the mean is pulled upward by infrequent, high-DIR outlier resamples. This is a known characteristic of bootstrapped ratio metrics on small subgroups (the denominator can occasionally be very small, producing large ratio spikes) and explains why a normal approximation from the CI alone understates the true violation rate: the empirical 12.1% figure for LR is higher than a Gaussian approximation using the same mean and CI width would predict, because the skew concentrates extra density in the lower (sub-0.80) tail.
 
 ![Bootstrap Distribution Chart](https://github.com/Urvish04/credit-fairness-audit/blob/main/bootstrap_distribution_chart.png?raw=true)
 
@@ -95,11 +97,11 @@ These intervals overlap almost completely and each individually straddles the EE
 
 ## Discussion
 
-Two independent variance checks — one capturing model re-training + re-splitting, the other capturing pure test-set resampling — arrive at the same conclusion from different angles: the RF-vs-LR fairness gap does not survive re-sampling. At N=47, the Disparate Impact Ratio is not a stable estimate for either model; a single unlucky (or lucky) split can make a linear model look fairer, or less fair, than a non-linear one purely by chance. The correct audit conclusion isn't "Random Forest is more biased" — it's that **this subgroup's sample size cannot support that conclusion**, and any fairness metric reported from a single train/test split, without a stability check, is liable to produce a false conclusion in either direction.
+Two independent variance checks — one capturing model re-training + re-splitting, the other capturing pure test-set resampling — arrive at the same conclusion from different angles: the RF-vs-LR fairness gap does not survive resampling. At N=47, the Disparate Impact Ratio is not a stable estimate for either model; a single unlucky (or lucky) split can make a linear model look fairer, or less fair, than a non-linear one purely by chance, and roughly 1 in 10 resamples for either model crosses the regulatory threshold on sampling noise alone. The correct audit conclusion isn't "Random Forest is more biased" — it's that **this subgroup's sample size cannot support that conclusion**, and any fairness metric reported from a single train/test split, without a stability check, is liable to produce a false conclusion in either direction. This is a demonstration of a known model-risk failure mode, consistent with the validation standards set out in SR 11-7, applied concretely to a fairness-metric context.
 
 ## Limitations
 
-- **Small-N bootstrap constraint.** Bootstrapping itself is not immune to the small-sample problem it's used to diagnose — resampling from a 47-row subgroup produces a CI that is itself wide and noisy (a "CI on the CI"). Using the standard sample-size formula for a proportion (n ≈ z²p(1−p)/E², z=1.96, p≈0.75, E=0.05), a stable estimate with a ±0.05 margin of error at this approval rate would need a minority subgroup of roughly **N ≈ 290–300** — more than 6x the 47 available here. This is a constraint on what conclusions the data can support, not a flaw introduced by the analysis.
+- **Small-N bootstrap constraint.** Bootstrapping itself is not immune to the small-sample problem it's used to diagnose — resampling from a 47-row subgroup produces a CI, and a violation rate, that are themselves noisy estimates. Using the standard sample-size formula for a proportion (n ≈ z²p(1−p)/E², z=1.96, p≈0.75, E=0.05), a stable estimate with a ±0.05 margin of error at this approval rate would need a minority subgroup of roughly **N ≈ 290–300** — more than 6x the 47 available here. This is a constraint on what conclusions the data can support, not a flaw introduced by the analysis.
 - **Generalizability.** German Credit is a widely-used academic benchmark from 1994, not a production lending dataset — the finding describes a methodological failure mode (small-N fairness metrics are unreliable), not a real-world lending outcome. It should not be read as "fairness audits don't work," only as "fairness audits need adequate subgroup N to work."
 - Fairness metrics used (DIR, demographic parity, FNR gap) are outcome-based; no causal claims are made about the source of disparity.
 
@@ -109,7 +111,7 @@ Two independent variance checks — one capturing model re-training + re-splitti
 pip install -r requirements.txt
 ```
 
-Open `credit_fairness_audit.ipynb` in Jupyter or Google Colab and run cells top to bottom. Expected runtime: under 2 minutes (no GPU required). Section 1 confirms data load (1,000 rows); Section 3 baseline accuracy should land at ~74–75%; Section 4 reproduces the subgroup tables above; Section 5 reproduces the bootstrap CIs.
+Open `credit_fairness_audit.ipynb` in Jupyter or Google Colab and run cells top to bottom. Expected runtime: under 2 minutes (no GPU required). Section 1 confirms data load (1,000 rows); Section 3 baseline accuracy should land at ~74–75%; Section 4 reproduces the subgroup tables above; Section 5 reproduces the bootstrap CIs and violation rates.
 
 ## Stack
 
@@ -131,3 +133,4 @@ Open `credit_fairness_audit.ipynb` in Jupyter or Google Colab and run cells top 
 - Hofmann, H. German Credit Data. UCI Machine Learning Repository / OpenML (dataset id 31).
 - Weerts, H. et al. Fairlearn: Assessing and Improving Fairness of AI Systems. Microsoft, 2023.
 - U.S. Equal Employment Opportunity Commission. Uniform Guidelines on Employee Selection Procedures — the "four-fifths rule."
+- Board of Governors of the Federal Reserve System / Office of the Comptroller of the Currency. *Supervisory Guidance on Model Risk Management* (SR 11-7), 2011.
