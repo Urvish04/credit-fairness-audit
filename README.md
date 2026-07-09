@@ -47,7 +47,7 @@ Verification  (fairlearn cross-check)
 ## Method
 
 1. **Baseline model** — Logistic Regression, 70/30 stratified split. Verified no protected/derived attribute leaked into training features via feature inspection (not accuracy alone).
-2. **Fairness audit** — Approval rate, false negative rate, and Disparate Impact Ratio (DIR) computed per subgroup on the test set, against the EEOC "4/5ths rule" (DIR < 0.8 = adverse impact).
+2. **Fairness audit** — Approval rate, false negative rate, and Disparate Impact Ratio (DIR) computed per subgroup on the test set, against the EEOC "4/5ths rule" (DIR < 0.8 = adverse impact). 
 3. **Model comparison** — Random Forest trained on the identical split to test whether a non-linear model changes fairness characteristics.
 4. **Robustness check** — Both models re-evaluated across 5 independent splits (`random_state` = 42, 100, 2026, 777, 99) to test whether the single-split DIR result holds.
 5. **Verification** — Manual calculations cross-checked against `fairlearn.metrics.demographic_parity_difference` — exact agreement confirmed.
@@ -67,7 +67,7 @@ Verification  (fairlearn cross-check)
 
 ![DIR Variance Chart](https://github.com/Urvish04/credit-fairness-audit/blob/main/dir_variance_chart.png?raw=true)
 
-`fairlearn.metrics.demographic_parity_difference`: Sex = 0.0398, Age = 0.0513 — matches manual calculations exactly.
+`fairlearn.metrics.demographic_parity_difference`: Sex = 0.0398, Age = 0.0513 — matches manual calculations exactly.          ![Bootstrap Distribution Chart](https://github.com/Urvish04/credit-fairness-audit/blob/main/bootstrap_distribution_chart.png?raw=true)
 
 ## Discussion
 
