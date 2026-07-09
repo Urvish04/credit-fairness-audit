@@ -66,7 +66,7 @@ Verification  (fairlearn cross-check)
 
 **Multi-seed result:** DIR estimates for *both* models swing by ~0.10–0.12 across seeds (LR: 0.828–0.944, std ≈ 0.049 · RF: 0.852–0.951, std ≈ 0.038) — variance of the same magnitude as the effect initially attributed to model choice.
 
-![DIR across seeds](images/dir_across_seeds.png)
+![DIR Variance Chart](https://github.com/Urvish04/credit-fairness-audit/blob/main/dir_variance_chart.png?raw=true)
 
 `fairlearn.metrics.demographic_parity_difference`: Sex = 0.0398, Age = 0.0513 — matches manual calculations exactly.
 
