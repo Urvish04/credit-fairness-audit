@@ -60,7 +60,6 @@ Verification  (fairlearn cross-check)
 | Approval rate (LR) | 77.94% | 73.96% | 77.47% | 72.34% |
 | DIR (LR baseline) | — | 0.95 | — | 0.93 |
 
-![Approval rate by subgroup](images/approval_rate_by_group.png)
 
 **Single-split result (seed 42):** RF appeared to increase disparate impact on the young subgroup vs. LR (DIR 0.93 → 0.89) — suggestive of the model amplifying an age-related proxy.
 
